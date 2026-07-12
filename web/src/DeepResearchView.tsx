@@ -39,7 +39,7 @@ const fmtNum = (n: number) => (n || 0).toLocaleString();
 const DeepResearchView = ({ researchData, researchLoading, researchError, onResearch }: DeepResearchViewProps) => {
   if (!researchData && !researchLoading && !researchError) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-8 animate-in fade-in">
+      <div className="flex flex-col items-center justify-center py-24 px-4 gap-8 animate-in fade-in">
         <div className="relative">
           <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full" />
           <BookOpen className="w-24 h-24 text-blue-400 relative z-10" />
@@ -54,7 +54,7 @@ const DeepResearchView = ({ researchData, researchLoading, researchError, onRese
         </div>
         <button
           onClick={onResearch}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold px-10 py-5 rounded-2xl hover:opacity-90 transition-all flex items-center gap-3 text-lg shadow-[0_0_30px_rgba(59,130,246,0.3)]"
+          className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold px-10 py-5 rounded-2xl hover:opacity-90 transition-all flex items-center gap-3 text-lg shadow-[0_0_30px_rgba(59,130,246,0.3)]"
         >
           <BookOpen className="w-6 h-6" />
           START DEEP RESEARCH
@@ -65,7 +65,7 @@ const DeepResearchView = ({ researchData, researchLoading, researchError, onRese
 
   if (researchLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-6 animate-in fade-in">
+      <div className="flex flex-col items-center justify-center py-24 px-4 gap-6 animate-in fade-in">
         <div className="relative">
           <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full animate-pulse" />
           <RefreshCw className="w-20 h-20 text-blue-400 animate-spin relative z-10" />
@@ -85,7 +85,7 @@ const DeepResearchView = ({ researchData, researchLoading, researchError, onRese
 
   if (researchError) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-6 animate-in fade-in">
+      <div className="flex flex-col items-center justify-center py-24 px-4 gap-6 animate-in fade-in">
         <AlertCircle className="w-16 h-16 text-red-400" />
         <p className="text-red-400 text-lg">{researchError}</p>
         <button onClick={onResearch} className="bg-blue-500 text-white px-8 py-3 rounded-xl hover:opacity-80 transition-opacity flex items-center gap-2">
@@ -101,10 +101,10 @@ const DeepResearchView = ({ researchData, researchLoading, researchError, onRese
   return (
     <div className="flex flex-col gap-6 animate-in fade-in">
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {[
           { label: 'Upgrades Needed', value: stats.upgrade_count, color: 'text-blue-400' },
-          { label: 'Hero Gap', value: `${stats.hero_gap} lvl`, color: 'text-purple-400' },
+          { label: 'Hero Gap', value: `${stats.hero_gap} lvl`, color: 'text-blue-400' },
           { label: 'Equip Gap', value: `${stats.equip_gap} lvl`, color: 'text-yellow-400' },
           { label: 'Strategies Ready', value: `${stats.strategies_ready}/${stats.strategies_available}`, color: 'text-green-400' },
           { label: 'Generated', value: stats.report_generated?.split(' ')[0] || '', color: 'text-gray-400' },
@@ -206,7 +206,7 @@ const SectionCard = ({ section }: { section: any }) => {
                     <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">Key Spells</div>
                     <div className="flex flex-wrap gap-2">
                       {section.key_spells.map((s: string, i: number) => (
-                        <span key={i} className="text-xs bg-purple-500/10 text-purple-300 px-3 py-1.5 rounded-lg border border-purple-500/10">{s}</span>
+                        <span key={i} className="text-xs bg-blue-500/10 text-blue-300 px-3 py-1.5 rounded-lg border border-blue-500/10">{s}</span>
                       ))}
                     </div>
                   </div>

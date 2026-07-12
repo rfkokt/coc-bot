@@ -38,3 +38,4 @@ _*.py
 
 # Large external data
 *.har
+research_config.json

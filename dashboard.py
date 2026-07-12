@@ -3,10 +3,91 @@
 Stdlib only (http.server) — ga nambah dependency.
 Jalanin:  venv/bin/python dashboard.py   → buka http://localhost:8787
 """
-import http.server, json, os, re, signal, subprocess, sys, time, urllib.parse
+import http.server, json, os, re, signal, subprocess, sys, time, urllib.parse, threading, uuid
 from coc_analyzer import analyze
 from research import generate_deep_research
+import research_config
 import stats
+import db
+
+db.init_db()  # bikin tabel kalau DB ada
+
+# ── Registry task deep-research (jalan di background thread) ──────────────
+_RESEARCH_TASKS = {}  # session_id -> {status, phase, events, result, error, query, started}
+_RESEARCH_LOCK = threading.Lock()
+
+
+def _run_research_task(session_id, question):
+    """Jalanin LiveResearcher di background, update registry per progress event."""
+    from research_engine import LiveResearcher
+    from research_config import load_config
+
+    def on_progress(ev):
+        with _RESEARCH_LOCK:
+            t = _RESEARCH_TASKS.get(session_id)
+            if t is not None:
+                t["phase"] = ev.get("phase", t.get("phase"))
+                t["events"].append(ev)
+                t["events"] = t["events"][-40:]  # cap
+
+    try:
+        cfg = load_config()
+        result = LiveResearcher(cfg, on_progress).research(question)
+        with _RESEARCH_LOCK:
+            t = _RESEARCH_TASKS.get(session_id)
+            if t is not None:
+                t["status"] = "done"
+                t["result"] = result
+                # auto-simpan ke DB (best-effort)
+                meta = t.get("meta") or {}
+                db.save_research(meta.get("account_id"), meta.get("account_name"),
+                                 meta.get("th_level"), question, result)
+    except Exception as e:
+        with _RESEARCH_LOCK:
+            t = _RESEARCH_TASKS.get(session_id)
+            if t is not None:
+                t["status"] = "error"
+                t["error"] = str(e)
+
+def _build_account_question(th, analysis):
+    """Bikin pertanyaan research yg SPESIFIK ke kondisi akun — bukan generik.
+
+    Ambil item yg belum max (recs cur<max) + gap hero/equip dari analysis,
+    biar research nyari cara upgrade yg relevan buat akun ini.
+    """
+    year = time.strftime("%Y")
+    recs = analysis.get("recs") or []
+    # item belum max, kelompokin per kategori
+    unmaxed = [r for r in recs if isinstance(r, dict) and r.get("cur", 0) < r.get("max", 0)]
+    # dedup by name, ambil yg paling "ketinggalan" (gap terbesar) dulu
+    seen, priority = set(), []
+    for r in sorted(unmaxed, key=lambda x: (x.get("max", 0) - x.get("cur", 0)), reverse=True):
+        nm = r.get("name")
+        if nm and nm not in seen:
+            seen.add(nm)
+            priority.append(f"{nm} (lvl {r.get('cur',0)}/{r.get('max',0)})")
+    top = priority[:12]
+
+    summ = analysis.get("summary") or {}
+    hero_gap = summ.get("heroes_gap", 0)
+    equip_gap = summ.get("equip_gap", 0)
+
+    parts = [f"I play Clash of Clans at Town Hall {th}."]
+    if top:
+        parts.append("These structures/troops are NOT yet maxed and need upgrading: "
+                     + ", ".join(top) + ".")
+    if hero_gap:
+        parts.append(f"My heroes are {hero_gap} total levels below max.")
+    if equip_gap:
+        parts.append(f"My hero equipment is {equip_gap} total levels below max.")
+    parts.append(
+        f"Based on the current {year} meta, research the optimal UPGRADE PRIORITY ORDER "
+        f"for exactly these items, which upgrades give the biggest offense/defense impact "
+        f"first, the best attack strategies that use what I already have, hero equipment "
+        f"upgrade order, and the fastest way to farm the resources these specific upgrades cost. "
+        f"Be specific to my account state above, not generic TH{th} advice."
+    )
+    return " ".join(parts)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PID_FILE = os.path.join(HERE, "bot.pid")
@@ -438,6 +519,36 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(json.dumps(lookup_player(tag)), "application/json")
         elif path == "/analyze":
             self._send(ANALYZE_PAGE)
+        elif path == "/api/db/accounts":
+            self._send(json.dumps({"accounts": db.list_accounts()}), "application/json")
+        elif path == "/api/db/loot":
+            self._send(json.dumps({"loot": db.list_loot()}), "application/json")
+        elif path == "/api/db/research":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            acc = qs.get("account_id", [None])[0]
+            self._send(json.dumps({"research": db.list_research(acc)}), "application/json")
+        elif path == "/api/research/settings":
+            self._send(json.dumps(research_config.public_config()), "application/json")
+        elif path == "/api/research/models":
+            try:
+                from research_engine import list_models
+                models = list_models(research_config.load_config())
+                self._send(json.dumps({"models": models}), "application/json")
+            except Exception as e:
+                self._send(json.dumps({"models": [], "error": str(e)}), "application/json")
+        elif path.startswith("/api/research/status/"):
+            sid = path.rsplit("/", 1)[-1]
+            with _RESEARCH_LOCK:
+                t = _RESEARCH_TASKS.get(sid)
+                snap = None if t is None else {
+                    "status": t["status"], "phase": t.get("phase"),
+                    "events": t["events"][-8:], "query": t.get("query"),
+                    "result": t.get("result"), "error": t.get("error"),
+                }
+            if snap is None:
+                self._send(json.dumps({"status": "not_found"}), "application/json", code=404)
+            else:
+                self._send(json.dumps(snap), "application/json")
         elif path.startswith("/api/proxy"):
             import urllib.request as urllib_req
             qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -510,6 +621,100 @@ class H(http.server.BaseHTTPRequestHandler):
                     self._send(f'Invalid JSON: {e}', 'text/plain', code=400)
                 except Exception as e:
                     self._send(f'Research error: {e}', 'text/plain', code=500)
+        elif path == "/api/db/sync":
+            # Terima {accounts:[...]} dari frontend localStorage + sync loot dari stats.json.
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(n)) if n else {}
+                na = db.upsert_accounts(body.get("accounts", []))
+                import stats as _st
+                nl = db.sync_loot(_st.load().get("accounts", {}))
+                self._send(json.dumps({"accounts_saved": na, "loot_synced": nl}), "application/json")
+            except Exception as e:
+                self._send(f'Sync error: {e}', 'text/plain', code=400)
+        elif path == "/api/db/research/save":
+            # Simpan hasil research manual (CREATE). {account_id,account_name,th_level,query,result}
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                b = json.loads(self.rfile.read(n))
+                rid = db.save_research(b.get("account_id"), b.get("account_name"),
+                                       b.get("th_level"), b.get("query"), b.get("result"))
+                self._send(json.dumps({"id": rid}), "application/json")
+            except Exception as e:
+                self._send(f'Save error: {e}', 'text/plain', code=400)
+        elif path == "/api/db/research/delete":
+            # DELETE research by id. {id: N}
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                b = json.loads(self.rfile.read(n))
+                ok = db.delete_research(b.get("id"))
+                self._send(json.dumps({"deleted": ok}), "application/json")
+            except Exception as e:
+                self._send(f'Delete error: {e}', 'text/plain', code=400)
+        elif path == "/api/db/account/delete":
+            # DELETE account by id. {id: "..."}
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                b = json.loads(self.rfile.read(n))
+                ok = db.delete_account(b.get("id"))
+                self._send(json.dumps({"deleted": ok}), "application/json")
+            except Exception as e:
+                self._send(f'Delete error: {e}', 'text/plain', code=400)
+        elif path == "/api/research/translate":
+            # Translate report. {id: N, to: "id"} — cache di stats.translations
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                b = json.loads(self.rfile.read(n))
+                rid = b.get("id"); to = b.get("to", "id")
+                row = db.get_research_by_id(rid)
+                if not row:
+                    self._send('not found', 'text/plain', code=404); return
+                stats = row.get("stats") or {}
+                cached = (stats.get("translations") or {}).get(to)
+                if cached:
+                    self._send(json.dumps({"report": cached, "lang": to, "cached": True}), "application/json"); return
+                from research_engine import translate_text
+                translated = translate_text(row["report"], to)
+                db.set_translation(rid, to, translated)
+                self._send(json.dumps({"report": translated, "lang": to, "cached": False}), "application/json")
+            except Exception as e:
+                self._send(f'Translate error: {e}', 'text/plain', code=400)
+        elif path == "/api/research/settings":
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                updates = json.loads(self.rfile.read(n))
+                # kalau api_key kosong/mask, jangan timpa yg lama
+                if not updates.get("llm_api_key") or str(updates.get("llm_api_key", "")).startswith("\u2022"):
+                    updates.pop("llm_api_key", None)
+                research_config.save_config(updates)
+                self._send(json.dumps(research_config.public_config()), "application/json")
+            except Exception as e:
+                self._send(f'Settings error: {e}', 'text/plain', code=400)
+        elif path == "/api/research/start":
+            # Launch live LLM+SearXNG research di background thread. Return session_id.
+            n = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(n))
+                question = (body.get("query") or "").strip()
+                th = body.get("th_level")
+                analysis = body.get("analysis") or {}
+                if not question and th:
+                    question = _build_account_question(th, analysis)
+                if not question:
+                    self._send("Missing query or th_level", "text/plain", code=400)
+                    return
+                sid = "rp-" + uuid.uuid4().hex[:12]
+                with _RESEARCH_LOCK:
+                    _RESEARCH_TASKS[sid] = {"status": "running", "phase": "planning",
+                                            "events": [], "result": None, "error": None,
+                                            "query": question, "started": time.time(),
+                                            "meta": {"account_id": body.get("account_id"),
+                                                     "account_name": body.get("account_name"),
+                                                     "th_level": th}}
+                threading.Thread(target=_run_research_task, args=(sid, question), daemon=True).start()
+                self._send(json.dumps({"session_id": sid, "status": "running", "query": question}), "application/json")
+            except Exception as e:
+                self._send(f'Research start error: {e}', 'text/plain', code=500)
         else:
             self._send("not found", code=404)
 
@@ -519,4 +724,6 @@ class H(http.server.BaseHTTPRequestHandler):
 PORT = 5050
 if __name__ == "__main__":
     print(f"Dashboard: http://localhost:{PORT}")
-    http.server.HTTPServer(("127.0.0.1", PORT), H).serve_forever()
+    # ThreadingHTTPServer: status polls tak boleh ke-block sama request lain yg lagi jalan
+    # (research bisa 150s+; single-thread server bikin poll nyangkut → frontend kira "lost connection")
+    http.server.ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

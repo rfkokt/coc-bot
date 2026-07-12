@@ -1,0 +1,11 @@
+# SearXNG minimal config buat COC research — JSON API aktif.
+use_default_settings: true
+server:
+  secret_key: "coc-research-change-me"
+  limiter: false
+  image_proxy: false
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json

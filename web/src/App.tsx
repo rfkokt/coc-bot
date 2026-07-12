@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Play, Square, Settings2, ScrollText, Swords, AlertCircle, RefreshCw, Sun, Moon, BookOpen } from 'lucide-react';
 import DeepResearchView from './DeepResearchView';
+import LiveResearchView from './LiveResearchView';
+import RekomendasiView from './RekomendasiView';
 
 const App = () => {
   const [theme, setTheme] = useState('dark');
@@ -29,7 +31,14 @@ const App = () => {
     } catch {}
     return [];
   });
-  const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(() => {
+    try { return localStorage.getItem('coc_active_account') || null; } catch { return null; }
+  });
+  
+  useEffect(() => {
+    if (activeAccountId) localStorage.setItem('coc_active_account', activeAccountId);
+    else localStorage.removeItem('coc_active_account');
+  }, [activeAccountId]);
   
   const activeAccount = accounts.find(a => a.id === activeAccountId);
   const analyzeJson = activeAccount?.json || '';
@@ -62,6 +71,18 @@ const App = () => {
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light');
   }, [theme]);
+
+  // auto-sync akun + loot ke DB (VPS Postgres) tiap akun berubah — best-effort, ga blok UI
+  useEffect(() => {
+    if (!accounts.length) return;
+    const t = setTimeout(() => {
+      fetch('http://localhost:5050/api/db/sync', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accounts }),
+      }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [accounts]);
 
   // Poll state and log
   useEffect(() => {
@@ -358,7 +379,13 @@ const App = () => {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  const [activeTab, setActiveTab] = useState('Heroes');
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return localStorage.getItem('coc_active_tab') || 'Heroes'; } catch { return 'Heroes'; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('coc_active_tab', activeTab);
+  }, [activeTab]);
 
   const fmtDur = (secs: number) => {
     if (!secs) return '0s';
@@ -504,6 +531,8 @@ const App = () => {
   };
 
   const tabs = analyzeResult ? [
+    { id: 'LiveResearch', title: 'Live AI Research', data: ['x'] },
+    { id: 'Rekomendasi', title: 'Rekomendasi', data: ['x'] },
     { id: 'Priority', title: 'Priority Guide', data: analyzeResult.recs },
     { id: 'TownHall', title: 'Town Hall', data: analyzeResult.recs?.filter((r: any) => r.cat === 'townhall') },
     { id: 'Defenses', title: 'Defenses', data: analyzeResult.recs?.filter((r: any) => r.cat === 'defense') },
@@ -519,7 +548,7 @@ const App = () => {
     { id: 'Pets', title: 'Pets', data: analyzeResult.pet_recs },
     { id: 'Walls', title: 'Walls', data: analyzeResult.recs?.filter((r: any) => r.cat === 'wall') },
     { id: 'Strategies', title: 'Strategies', data: analyzeResult.strategies },
-    { id: 'DeepResearch', title: '🔬 Deep Research', data: [] }
+    { id: 'DeepResearch', title: 'Deep Research', data: [] }
   ].filter(t => t.data && t.data.length > 0) : [];
 
   const PRIORITY_TIERS = [
@@ -541,10 +570,10 @@ const App = () => {
       <div className="relative z-10 w-full max-w-[1400px] mx-auto px-6 py-12 flex flex-col gap-8">
         
         {/* HEADER */}
-        <header className="flex justify-between items-end liquid-glass p-6 rounded-[24px]">
-          <div>
-            <h1 className="font-grotesk text-[32px] text-neon tracking-wider">COC.BOT // DASHBOARD</h1>
-            <div className="flex gap-6 mt-4 font-bold tracking-widest text-sm">
+        <header className="flex flex-col md:flex-row justify-between items-center md:items-end gap-6 md:gap-0 liquid-glass p-6 rounded-[24px]">
+          <div className="text-center md:text-left">
+            <h1 className="font-grotesk text-[32px] md:text-[32px] text-neon tracking-wider">COC.BOT // DASHBOARD</h1>
+            <div className="flex justify-center md:justify-start gap-6 mt-4 font-bold tracking-widest text-sm">
               <button 
                 onClick={() => setView('dashboard')} 
                 className={`transition-colors ${view === 'dashboard' ? 'text-neon border-b-2 border-neon pb-1' : 'opacity-50 hover:opacity-100'}`}
@@ -559,8 +588,8 @@ const App = () => {
               </button>
             </div>
           </div>
-          <div className="text-right flex flex-col items-end gap-2">
-             <div className="flex items-center gap-4">
+          <div className="text-center md:text-right flex flex-col items-center md:items-end gap-2">
+             <div className="flex flex-wrap items-center justify-center md:justify-end gap-4">
                 <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 liquid-glass rounded-full hover:scale-110 transition-transform">
                   {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
@@ -789,8 +818,8 @@ const App = () => {
             ) : (
               <section className="liquid-glass p-8 rounded-[32px] flex flex-col gap-8">
                 {/* Header Summary */}
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div className="flex items-center gap-6 bg-[var(--panel-bg)] p-4 rounded-2xl pr-8 w-full md:w-auto">
+                <div className="flex flex-col xl:flex-row items-center justify-between gap-6">
+                  <div className="flex items-center gap-6 bg-[var(--panel-bg)] p-4 rounded-2xl pr-8 w-full xl:w-auto">
                     <div className="w-20 h-20 flex-shrink-0">
                       <img src={getImageUrl('Town Hall', 'other', analyzeResult.th_level)} alt="TH" className="w-full h-full object-contain filter drop-shadow-lg" />
                     </div>
@@ -804,7 +833,7 @@ const App = () => {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="flex flex-wrap items-center justify-center xl:justify-end gap-3 w-full xl:w-auto">
                     <button
                       onClick={() => activeAccount && reanalyzeAccount(activeAccount)}
                       disabled={analyzeLoading}
@@ -818,7 +847,7 @@ const App = () => {
                       onClick={() => { activeAccount && doDeepResearch(activeAccount); setActiveTab('DeepResearch'); }}
                       disabled={researchLoading}
                       title="Generate Deep Research report (Odysseus pattern)"
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-xl hover:opacity-80 transition-opacity font-bold flex-shrink-0 disabled:opacity-40 flex items-center gap-2 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl hover:opacity-80 transition-opacity font-bold flex-shrink-0 disabled:opacity-40 flex items-center gap-2 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
                     >
                       <BookOpen className="w-4 h-4" />
                       {researchLoading ? 'Researching...' : '🔬 Deep Research'}
@@ -870,7 +899,7 @@ const App = () => {
 
                 {/* Remaining Upgrades Summary Panel */}
                 {villageTotals && (
-                  <div className="p-6 bg-[#1a1a2e] border border-white/10 rounded-2xl flex flex-wrap items-center justify-between gap-6 shadow-xl relative overflow-hidden">
+                  <div className="p-6 bg-[#1a1a2e] border border-white/10 rounded-2xl flex flex-col lg:flex-row lg:flex-wrap items-center lg:justify-between gap-6 shadow-xl relative overflow-hidden text-center lg:text-left">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
                     <div className="z-10">
                       <h3 className="text-xl font-bold text-white mb-1 font-['Supercell_Magic'] tracking-wider">Remaining Upgrades</h3>
@@ -999,6 +1028,10 @@ const App = () => {
                       researchError={researchError}
                       onResearch={() => activeAccount && doDeepResearch(activeAccount)}
                     />
+                  ) : activeTab === 'LiveResearch' ? (
+                    <LiveResearchView thLevel={analyzeResult?.th_level} accountId={activeAccount?.id} accountName={activeAccount?.name} thImg={analyzeResult?.th_level ? getImageUrl('Town Hall', 'other', analyzeResult.th_level) : undefined} analysis={analyzeResult} />
+                  ) : activeTab === 'Rekomendasi' ? (
+                    <RekomendasiView accountId={activeAccount?.id} accountName={activeAccount?.name} thLevel={analyzeResult?.th_level} thImg={analyzeResult?.th_level ? getImageUrl('Town Hall', 'other', analyzeResult.th_level) : undefined} />
                   ) : (
                     <div className="flex flex-col gap-12">
                       {/* Detailed Table (Clash Ninja Style) */}
@@ -1066,7 +1099,7 @@ const App = () => {
                                    </div>
                                    
                                    <div className="flex-1 text-center md:text-left">
-                                     <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-widest">{name}</h3>
+                                     <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-500 uppercase tracking-widest">{name}</h3>
                                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-3">
                                        <div className="flex items-center gap-2 bg-black/40 px-4 py-1.5 rounded-full border border-white/10 text-sm">
                                          <span className="text-gray-400">Total Upgrades:</span>
