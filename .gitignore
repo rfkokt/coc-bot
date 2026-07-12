@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node / Web
+web/node_modules/
+web/dist/
+web/build/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Bot runtime
+bot.pid
+stats.json
+
+# Scratch / test files
+scratchpad_result.png
+rslt.png
+_*.py
+*.html
+
+# Large external data
+*.har

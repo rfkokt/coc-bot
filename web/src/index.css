@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --font-grotesk: "Anton", sans-serif;
+  --font-condiment: "Condiment", cursive;
+  --color-background: var(--bg);
+  --color-cream: var(--text);
+  --color-neon: var(--accent);
+}
+
+:root {
+  --bg: #010828;
+  --text: #EFF4FF;
+  --accent: #6FFF00;
+  --glass-bg: rgba(255, 255, 255, 0.01);
+  --glass-blend: luminosity;
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  --panel-bg: rgba(0, 0, 0, 0.3);
+  --texture-blend: lighten;
+  --texture-op: 0.6;
+}
+
+:root.light {
+  --bg: #F8FAFC;
+  --text: #0F172A;
+  --accent: #2563EB;
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-blend: normal;
+  --glass-border: rgba(0, 0, 0, 0.05);
+  --glass-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  --panel-bg: rgba(255, 255, 255, 0.6);
+  --texture-blend: multiply;
+  --texture-op: 0.2;
+}
+
+@layer utilities {
+  .liquid-glass {
+    background: var(--glass-bg);
+    background-blend-mode: var(--glass-blend);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .liquid-glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.4px;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.15) 20%,
+      rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%,
+      rgba(255,255,255,0.15) 80%, rgba(255,255,255,0.45) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
