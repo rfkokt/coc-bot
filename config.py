@@ -118,6 +118,6 @@ LOOT_MAX = True
 
 # --- Threshold loot minimum ---
 # TH1 loot mentok ~6-8K. Naikin ke 300K+ saat TH tinggi.
-GOLD_MIN   = 700000
-ELIXIR_MIN = 700000
+GOLD_MIN   = 500000
+ELIXIR_MIN = 500000
 DARK_MIN   = 200

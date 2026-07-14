@@ -84,6 +84,15 @@ const App = () => {
     return () => clearTimeout(t);
   }, [accounts]);
 
+  const reconnectAdb = async () => {
+    try {
+      const r = await fetch('http://localhost:5050/api/adb/reconnect');
+      const d = await r.json();
+      if (d.ok) setState(s => ({ ...s, adbcls: 'on', adbmsg: d.msg }));
+      else setState(s => ({ ...s, adbcls: 'off', adbmsg: d.msg }));
+    } catch { setState(s => ({ ...s, adbcls: 'off', adbmsg: 'Gagal connect ke backend.' })); }
+  };
+
   // Poll state and log
   useEffect(() => {
     const fetchState = async () => {
@@ -596,10 +605,13 @@ const App = () => {
                 <div className={`w-3 h-3 rounded-full ${state.dotcls === 'on' ? 'bg-neon' : state.dotcls === 'sleep' ? 'bg-yellow-400' : 'bg-red-500'}`} />
                 <span className="text-lg font-bold">{state.status}</span>
                 <div className="w-px h-6 bg-white/10" />
-                <div className={`w-3 h-3 rounded-full ${state.adbcls === 'on' ? 'bg-neon' : 'bg-red-500'}`} />
-                <span className={`text-base font-bold ${state.adbcls === 'on' ? '' : 'text-red-400'}`}>
-                  ADB {state.adbcls === 'on' ? '✓' : '✗'}
-                </span>
+                <button onClick={reconnectAdb} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105" style={{background: state.adbcls === 'on' ? 'rgba(0,255,200,0.08)' : 'rgba(255,80,80,0.12)'}}>
+                  <div className={`w-3 h-3 rounded-full ${state.adbcls === 'on' ? 'bg-neon' : 'bg-red-500'}`} />
+                  <span className={`text-base font-bold ${state.adbcls === 'on' ? '' : 'text-red-400'}`}>
+                    ADB {state.adbcls === 'on' ? '✓' : '✗'}
+                  </span>
+                  <RefreshCw className="w-3 h-3 ml-1 opacity-40" />
+                </button>
              </div>
              {state.adbcls !== 'on' && (
                <div className="text-xs text-red-400/80 bg-red-500/10 px-4 py-1.5 rounded-full flex items-center gap-2">

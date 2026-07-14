@@ -1,9 +1,19 @@
 import subprocess, random, numpy as np, cv2
-from config import ADB_PATH, DEVICE
+from config import ADB_PATH, _detect_device
 from human import human_delay, jitter
 
 def _adb(*args):
-    return subprocess.run([ADB_PATH, "-s", DEVICE, *args], capture_output=True)
+    return subprocess.run([ADB_PATH, "-s", _detect_device(), *args], capture_output=True)
+
+def healthy():
+    """Cek ADB bener2 hidup: screenshot balik gambar (bukan None).
+    Dipanggil tiap siklus bot biar gak nge-tap ke device mati."""
+    from config import _detect_device
+    dev = _detect_device()
+    if not dev:
+        return False
+    r = subprocess.run([ADB_PATH, "-s", dev, "get-state"], capture_output=True, timeout=5)
+    return r.stdout.strip() == b"device" or r.stdout.strip() == "device"
 
 def screenshot():
     raw = _adb("exec-out", "screencap", "-p").stdout

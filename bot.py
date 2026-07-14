@@ -459,17 +459,22 @@ def find_and_attack():
 PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 
 def _acquire_singleton():
-    """Cegah instance dobel (numpuk = mac lemot). Cek pid lama masih hidup?"""
-    if os.path.exists(PID_FILE):
+    """Cegah instance dobel (numpuk = mac lemot). Claim atomik via O_EXCL — bebas race."""
+    import atexit, errno
+    while True:
         try:
-            old = int(open(PID_FILE).read().strip())
-            os.kill(old, 0)            # ga raise = proses masih jalan
-            print(f"Bot sudah jalan (pid {old}), keluar.")
-            raise SystemExit(1)
-        except (ValueError, ProcessLookupError):
-            pass                       # pid file basi / proses mati → lanjut
-    open(PID_FILE, "w").write(str(os.getpid()))
-    import atexit
+            fd = os.open(PID_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                old = int(open(PID_FILE).read().strip())
+                os.kill(old, 0)            # ga raise = proses masih jalan
+                print(f"Bot sudah jalan (pid {old}), keluar.")
+                raise SystemExit(1)
+            except (ValueError, ProcessLookupError):
+                os.remove(PID_FILE)      # pid file basi → hapus, ulang claim
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
     atexit.register(lambda: os.path.exists(PID_FILE) and os.remove(PID_FILE))
 
 def main():
@@ -481,6 +486,11 @@ def main():
         if not ignore_sched and not should_be_active():
             log("Di luar jam aktif, tidur...")
             time.sleep(300)
+            continue
+        # ADB health-check — cek device masih konek sebelum attack
+        if not adb.healthy():
+            log("⚠ ADB disconnect — tunggu 10s, coba konek ulang...")
+            time.sleep(10)
             continue
         t0 = time.time()
         try:

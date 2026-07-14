@@ -510,6 +510,14 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(tail_log(), "text/plain; charset=utf-8")
         elif path == "/state":
             self._send(json.dumps(state()), "application/json")
+        elif path == "/api/adb/reconnect":
+            try:
+                from config import _detect_device
+                dev = _detect_device()
+                ok, msg = adb_status()
+                self._send(json.dumps({"ok": ok, "msg": msg, "device": dev}), "application/json")
+            except Exception as e:
+                self._send(json.dumps({"ok": False, "msg": str(e)}), "application/json")
         elif path == "/stats.json":
             self._send(json.dumps(stats.load()), "application/json")
         elif path.startswith("/api/player"):
