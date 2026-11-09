@@ -71,7 +71,7 @@ CAMP_STATUS_REGION    = (850, 230, 1020, 280)  # teks "320/320" di My Army
 
 # --- Village Resource Collectors ---
 # Tap 1 kolektor per tipe mengumpulkan semua sumber daya bertipe sama di desa
-AUTO_COLLECT_RESOURCES = True
+AUTO_COLLECT_RESOURCES = False
 GOLD_COLLECTOR_BTN    = (640, 210)
 ELIXIR_COLLECTOR_BTN  = (740, 370)
 DARK_COLLECTOR_BTN    = (750, 550)
