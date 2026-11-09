@@ -10,7 +10,7 @@ const App = () => {
   const [log, setLog] = useState('');
   const [statsAccounts, setStatsAccounts] = useState<Record<string, any>>({});
   const [settings, setSettings] = useState({
-    GOLD_MIN: '', ELIXIR_MIN: '', DARK_MIN: '', STAR1_DAMAGE: '', BATTLE_SECS: ''
+    GOLD_MIN: '', ELIXIR_MIN: '', DARK_MIN: '', STAR1_DAMAGE: '', BATTLE_SECS: '', AUTO_WALL_UPGRADE: '', AUTO_COLLECT_RESOURCES: ''
   });
   type Account = { id: string; name: string; tag?: string; th_level: number; json: string; result: any; date: number };
   const [accounts, setAccounts] = useState<Account[]>(() => {
@@ -151,8 +151,13 @@ const App = () => {
     e.preventDefault();
     const formData = new URLSearchParams();
     Object.entries(settings).forEach(([k, v]) => formData.append(k, String(v)));
-    await fetch('http://localhost:5050/save', { method: 'POST', body: formData });
-    alert('Config Tersimpan!');
+    try {
+      const res = await fetch('http://localhost:5050/save', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(await res.text());
+      alert('Config tersimpan! Restart bot jika sedang berjalan agar perubahan berlaku.');
+    } catch (error) {
+      alert(`Gagal menyimpan config: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const doAnalyze = async (jsonStr: string) => {
@@ -721,7 +726,35 @@ const App = () => {
                     ))}
                   </div>
                   
-                  <button type="submit" className="mt-auto bg-neon text-white dark:text-background font-bold py-4 rounded-xl hover:opacity-80 transition-opacity flex items-center justify-center gap-2">
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="AUTO_WALL_UPGRADE"
+                        checked={settings.AUTO_WALL_UPGRADE === 'True'}
+                        onChange={e => setSettings(s => ({ ...s, AUTO_WALL_UPGRADE: e.target.checked ? 'True' : 'False' }))}
+                        className="w-5 h-5 accent-neon"
+                        aria-describedby="auto-wall-help"
+                      />
+                      Auto Upgrade Wall
+                    </label>
+                    <p id="auto-wall-help" className="text-sm opacity-70">
+                      Upgrade wall otomatis saat gold/elixir berlebih. Simpan konfigurasi, lalu restart bot jika sedang berjalan.
+                    </p>
+                  </div>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="AUTO_COLLECT_RESOURCES"
+                      checked={settings.AUTO_COLLECT_RESOURCES === 'True'}
+                      onChange={e => setSettings(s => ({ ...s, AUTO_COLLECT_RESOURCES: e.target.checked ? 'True' : 'False' }))}
+                      className="w-5 h-5 accent-neon"
+                    />
+                    Auto Collect Village Resources
+                  </label>
+
+                  <button type="submit" disabled={!settings.AUTO_WALL_UPGRADE || !settings.AUTO_COLLECT_RESOURCES} className="mt-auto bg-neon text-white dark:text-background font-bold py-4 rounded-xl hover:opacity-80 transition-opacity flex items-center justify-center gap-2">
                     SAVE CONFIGURATION
                   </button>
                 </form>

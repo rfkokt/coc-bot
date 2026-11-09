@@ -16,21 +16,7 @@ else
   echo "• BlueStacks sudah jalan"
 fi
 
-# 2) Tunggu adb localhost:5555 ready (max ~120s)
-echo "⏳ Tunggu BE adb siap..."
-st=""
-for i in $(seq 1 120); do
-  st="$("$ADB" -s localhost:5555 get-state 2>/dev/null | tr -d '\r')"
-  [ "$st" = "device" ] && break
-  sleep 1
-done
-if [ "$st" != "device" ]; then
-  echo "⛔ BE gagal connect dalam 120s. Cek BlueStacks nyala & COC kebuka?" >&2
-  exit 1
-fi
-echo "✅ BE adb siap (localhost:5555 device)"
-
-# 3) Backend (dashboard.py :5050) — restart pakai venv biar fix adb_controller aktif,
+# 2) Backend (dashboard.py :5050) — restart pakai venv biar fix adb_controller aktif,
 #    walau port udah kepakai sama instance stale (system-python).
 if lsof -iTCP:"$BE_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "• Backend ($BE_PORT) kepakai → kill stale, restart venv"
@@ -49,6 +35,16 @@ else
   echo "▶ Start FE (web/ :$FE_PORT)"
   nohup npm run dev >>../fe.log 2>&1 < /dev/null &
 fi
+
+# 5) Cek ADB background (max 30s, ga blocking)
+(
+  for i in $(seq 1 30); do
+    st="$("$ADB" -s localhost:5555 get-state 2>/dev/null | tr -d '\r')"
+    [ "$st" = "device" ] && break
+    sleep 1
+  done
+  [ "$st" = "device" ] && echo "✅ ADB siap" || echo "⚠ ADB ga siap dalam 30s — reconnect manual via dashboard"
+) &
 
 echo "✅ BE + FE nyala."
 echo "   Buka http://localhost:$FE_PORT  (API backend :$BE_PORT, adb BE :5555)"

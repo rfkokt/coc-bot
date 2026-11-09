@@ -120,9 +120,18 @@ def adb_status():
 
 # setting yg boleh diedit dari web: nama di config.py → label
 EDITABLE = {
+    "LOOT_MODE": "Mode Filter Loot (TOTAL/EITHER/BOTH/DARK)",
+    "TOTAL_MIN": "Total Gold+Elixir min",
     "GOLD_MIN": "Gold minimum",
     "ELIXIR_MIN": "Elixir minimum",
     "DARK_MIN": "Dark minimum",
+    "DEAD_BASE_DETECTION": "Deteksi Dead Base (True/False)",
+    "DEAD_BASE_MIN_LOOT": "Dead Base Min Loot (Gold/Elixir)",
+    "AUTO_COLLECT_RESOURCES": "Auto Collect Village Resources (True/False)",
+    "AUTO_WALL_UPGRADE": "Auto Wall Upgrade (True/False)",
+    "WALL_MIN_GOLD": "Auto Wall Min Gold (Overflow)",
+    "WALL_MIN_ELIXIR": "Auto Wall Min Elixir (Overflow)",
+    "AUTO_LAB_UPGRADE": "Auto Lab Upgrade (True/False)",
     "STAR1_DAMAGE": "Damage bintang 1 (%)",
     "BATTLE_SECS": "Battle timeout (detik)",
 }
@@ -140,21 +149,37 @@ def bot_pid():
     return None
 
 def read_settings():
-    """Baca nilai EDITABLE dari config.py via regex (angka, boleh _ pemisah ribuan)."""
+    """Baca nilai EDITABLE dari config.py via regex."""
     txt = open(CONFIG).read()
     out = {}
     for key in EDITABLE:
-        m = re.search(rf"^{key}\s*=\s*([\d_]+)", txt, re.M)
-        out[key] = int(m.group(1).replace("_", "")) if m else None
+        if key == "LOOT_MODE":
+            m = re.search(rf'^{key}\s*=\s*["\']([^"\']+)["\']', txt, re.M)
+            out[key] = m.group(1) if m else "TOTAL"
+        elif key in ("DEAD_BASE_DETECTION", "AUTO_WALL_UPGRADE", "AUTO_LAB_UPGRADE", "AUTO_COLLECT_RESOURCES"):
+            m = re.search(rf"^{key}\s*=\s*(True|False)", txt, re.M)
+            out[key] = m.group(1) if m else "True"
+        else:
+            m = re.search(rf"^{key}\s*=\s*([\d_]+)", txt, re.M)
+            out[key] = int(m.group(1).replace("_", "")) if m else None
     return out
 
 def write_setting(key, value):
     """Patch satu baris `KEY = ...` di config.py, ga sentuh komentar/struktur lain."""
     if key not in EDITABLE:
         raise ValueError("key tak dikenal")
-    value = int(value)  # raise kalau bukan angka → validasi input
     txt = open(CONFIG).read()
-    new, n = re.subn(rf"^({key}\s*=\s*)[\d_]+", rf"\g<1>{value}", txt, count=1, flags=re.M)
+    if key == "LOOT_MODE":
+        val_str = str(value).strip().upper()
+        if val_str not in ("TOTAL", "EITHER", "BOTH", "DARK"):
+            raise ValueError("LOOT_MODE harus TOTAL, EITHER, BOTH, atau DARK")
+        new, n = re.subn(rf'^({key}\s*=\s*)["\'][^"\']+["\']', rf'\g<1>"{val_str}"', txt, count=1, flags=re.M)
+    elif key in ("DEAD_BASE_DETECTION", "AUTO_WALL_UPGRADE", "AUTO_LAB_UPGRADE", "AUTO_COLLECT_RESOURCES"):
+        val_str = "True" if str(value).strip().lower() in ("true", "1", "yes") else "False"
+        new, n = re.subn(rf"^({key}\s*=\s*)(True|False)", rf"\g<1>{val_str}", txt, count=1, flags=re.M)
+    else:
+        value = int(value)  # raise kalau bukan angka → validasi input
+        new, n = re.subn(rf"^({key}\s*=\s*)[\d_]+", rf"\g<1>{value}", txt, count=1, flags=re.M)
     if n != 1:
         raise ValueError(f"{key} tak ditemukan di config.py")
     open(CONFIG, "w").write(new)
@@ -180,8 +205,10 @@ def start_bot(ignore_schedule=False, mode="normal"):
     if ignore_schedule:
         env["COC_IGNORE_SCHEDULE"] = "1"
     env["COC_MODE"] = mode
+    # mode builder_base = desa malam → jalanin bb_bot.py, bukan bot.py (HV)
+    script = "bb_bot.py" if mode == "builder_base" else "bot.py"
     log = open(LOG_FILE, "w")
-    proc = subprocess.Popen([PYTHON, "-u", "bot.py"], cwd=HERE, stdout=log, stderr=log, env=env, start_new_session=True)
+    proc = subprocess.Popen([PYTHON, "-u", script], cwd=HERE, stdout=log, stderr=log, env=env, start_new_session=True)
     # tunggu subprocess tulis PID ke bot.pid (max 3s)
     for _ in range(30):
         time.sleep(0.1)
@@ -239,6 +266,7 @@ PAGE = """<!doctype html><meta charset=utf-8><title>COC Bot</title>
     <button id=start_btn onclick="act('start')" {startdis}>▶ Start</button>
     <button class=test id=start_test_btn onclick="act('start_test')" {startdis}>🧪 Start (abaikan jadwal)</button>
     <button class=test id=start_loot_btn onclick="act('start_loot')" {startdis} style=background:#c9791b>💰 Start (force loot)</button>
+    <button class=test id=start_bb_btn onclick="act('start_bb')" {startdis} style=background:#5a3a8a>🌙 Start (desa malam)</button>
     <button class=stop id=stop_btn onclick="act('stop')" {stopdis}>■ Stop</button>
   </p>
   <p id=msg style="color:#9aa4b2;font-size:13px;margin:8px 0 0;min-height:18px"></p>
@@ -275,6 +303,7 @@ setInterval(async()=>{{
   document.getElementById('start_btn').disabled=s.running;
   document.getElementById('start_test_btn').disabled=s.running;
   document.getElementById('start_loot_btn').disabled=s.running;
+  document.getElementById('start_bb_btn').disabled=s.running;
   document.getElementById('stop_btn').disabled=!s.running;
   document.getElementById('stats').innerHTML=s.statsgrid;
 }},3000);
@@ -584,6 +613,7 @@ class H(http.server.BaseHTTPRequestHandler):
             msg = {"start": lambda: start_bot(False),
                    "start_test": lambda: start_bot(True),
                    "start_loot": lambda: start_bot(True, mode="force_loot"),
+                   "start_bb": lambda: start_bot(True, mode="builder_base"),
                    "stop": stop_bot}.get(a, lambda: "aksi tak dikenal")()
             self._send(msg, "text/plain; charset=utf-8")
         elif path == "/save":
