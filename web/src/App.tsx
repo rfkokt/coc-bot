@@ -133,6 +133,9 @@ const App = () => {
         const s: any = {};
         inputs.forEach((i: any) => s[i.name] = i.value);
         setSettings(prev => ({ ...prev, ...s }));
+      })
+      .catch(error => {
+        alert(`Gagal memuat konfigurasi: ${error instanceof Error ? error.message : String(error)}. Refresh halaman untuk mencoba lagi.`);
       });
   }, []);
 
@@ -149,6 +152,10 @@ const App = () => {
 
   const saveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (Object.values(settings).some(value => value === '')) {
+      alert('Konfigurasi belum lengkap atau gagal dimuat. Refresh halaman; restart backend jika opsi baru belum muncul.');
+      return;
+    }
     const formData = new URLSearchParams();
     Object.entries(settings).forEach(([k, v]) => formData.append(k, String(v)));
     try {
@@ -754,7 +761,7 @@ const App = () => {
                     Auto Collect Village Resources
                   </label>
 
-                  <button type="submit" disabled={!settings.AUTO_WALL_UPGRADE || !settings.AUTO_COLLECT_RESOURCES} className="mt-auto bg-neon text-white dark:text-background font-bold py-4 rounded-xl hover:opacity-80 transition-opacity flex items-center justify-center gap-2">
+                  <button type="submit" className="mt-auto bg-neon text-white dark:text-background font-bold py-4 rounded-xl hover:opacity-80 transition-opacity flex items-center justify-center gap-2">
                     SAVE CONFIGURATION
                   </button>
                 </form>
